@@ -2,6 +2,8 @@ module Lexer where
 import           MyParser
 import           Control.Applicative
 import           Data.Char
+import           Data.Text.Prettyprint.Doc
+
 
 integerParser :: Parser Lexeme
 integerParser = do
@@ -16,13 +18,13 @@ string' xs t = do
 typeParser :: Parser Lexeme
 typeParser = do
   us <- upper
-  rs <- many1 $ sat (\c -> isAlphaNum c || (c == '_'))
+  rs <- many $ sat (\c -> isAlphaNum c || (c == '_')) --many
   return (TypeIdToken, us : rs)
 
 objectParser :: Parser Lexeme
 objectParser = do
   us <- lower
-  rs <- many1 $ sat (\c -> isAlphaNum c || (c == '_'))
+  rs <- many $ sat (\c -> isAlphaNum c || (c == '_')) --many
   return (ObjectIdToken, us : rs)
 
 whitespaceParser :: Parser Lexeme
@@ -37,7 +39,7 @@ whitespaceParser = do
 
 allOtherParser :: Parser Lexeme
 allOtherParser = do
-  cs <- sat (const True)
+  cs <- item--sat (const True)
   return (CatchAllToken, [cs])
 
 negativeIntegerParser :: Parser Lexeme
@@ -94,7 +96,7 @@ comparisonOperatorParser =
 operatorParser :: Parser Lexeme
 operatorParser =
   string' "+" PlusOperatorToken
-    <|> string' "-" MultiplyOperatorToken
+    <|> string' "-" MinusOperatorToken
     <|> string' "/" DivideOperatorToken
     <|> string' "*" MultiplyOperatorToken
     <|> string' "~" NegateOperatorToken
@@ -127,12 +129,19 @@ grammarCharsParser =
     <|> string' ","  CommaToken
 
 
+multilineContinueParser :: Parser String
+multilineContinueParser = do
+  cs <- many $ noneOf "*"
+  ys <- string "*"
+  xs <- string ")" <|> multilineContinueParser
+  return (cs ++ ys ++ xs)
+
+--this wont work if there are two (* asfadf * *)
 multilineCommentParser :: Parser Lexeme
 multilineCommentParser = do
   string "(*"
-  comment <- many1 $ noneOf "*"
-  string "*)"
-  return (MultiLineCommentToken, "(*" ++ comment ++ "*)")
+  comment <- multilineContinueParser
+  return (MultiLineCommentToken, "(*" ++ comment)
 
 type Lexeme = (Token, String)
 
@@ -184,7 +193,10 @@ data Token =
         | DotToken
         | CommaToken
         | CatchAllToken
-        deriving (Show)
+        deriving (Show, Eq)
+
+instance Pretty Token where
+  pretty a = pretty $ show a
 
 parseAll :: Parser Lexeme
 parseAll =
@@ -213,7 +225,30 @@ parseFile xs = case parse parseAll xs of
   []                               -> []
 
 
-coolFile = "data/invalid_cool.cl"
+
+files =
+  [ "arith.cl"
+  , "atoi.cl"
+  , "atoi_test.cl"
+  , "book_list.cl"
+  , "cells.cl"
+  , "complex.cl"
+  , "cool.cl"
+  , "graph.cl"
+  , "hairyscary.cl"
+  , "hello_world.cl"
+  , "invalid_cool.cl"
+  , "io.cl"
+  , "lam.cl"
+  , "life.cl"
+  , "list.cl"
+  , "new_complex.cl"
+  , "palindrome.cl"
+  , "primes.cl"
+  , "sort_list.cl"
+  ]
+
+coolFile = "data/atoi_test.cl"
 
 main :: IO ()
 main = do
@@ -230,4 +265,6 @@ main = do
   -- let [(t9, rs9)] = parse parseAll rs8
   -- print (t9, rs9)
   let r = parseFile contents
+  let s = [ (t, cs) | ((t, cs), ss) <- r, t /= WhiteSpaceToken ]
   print $ map fst r
+  print $ pretty s
