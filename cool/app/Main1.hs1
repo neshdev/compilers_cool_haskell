@@ -1,0 +1,115 @@
+module Main where
+
+import           Control.Applicative
+import           Control.Monad
+import           Control.Monad                  ( liftM
+                                                , ap
+                                                )
+
+coolFile :: FilePath
+coolFile = "/Users/neshdev/cool_compiler/invalid_cool.cl"
+
+data Parser a = Parser {parse :: (String -> [(a,String)])}
+
+
+item :: Parser Char
+item = Parser
+    (\s -> case s of
+        ""       -> []
+        (x : xs) -> [(x, xs)]
+    )
+
+satisfies :: (Char -> Bool) -> Parser Char
+satisfies f = do
+    c <- item
+    case f c of
+        True  -> return c
+        False -> Parser (\cs -> [])
+
+instance Functor Parser where
+    fmap = liftM
+
+instance Applicative Parser where
+    pure  = return
+    (<*>) = ap
+
+instance MonadPlus Parser where
+    mzero = Parser (\s -> [])
+    mplus p q = Parser (\s -> parse p s ++ parse q s)
+
+instance Alternative Parser where
+    (<|>) = mplus
+    empty = mzero
+
+instance Monad Parser where
+    return a = Parser (\s -> [(a, s)])
+
+    -- Parser a -> (a -> Parser b) -> Parser b
+    -- Parser (String->[(a,String)] -> (a -> (String -> [(b,String)])) -> Parser (String -> [(b,String)]
+    p >>= q = Parser
+        (\s ->
+            let xs = parse p s
+                ys = map (\(a, cs) -> parse (q a) cs) xs
+            in  concat ys
+        )
+
+char :: Char -> Parser Char
+char c = satisfies (c ==)
+
+string :: String -> Parser String
+string ""       = return ""
+string (x : xs) = do
+    c <- char x
+    r <- string xs
+    return (c : r)
+
+option :: Parser a -> Parser a -> Parser a
+option p q = Parser
+    (\s -> case parse (mplus p q) s of
+        []       -> []
+        (x : xs) -> [x]
+    )
+
+{-
+many parses repeated (0 or more) applications of Parser p. many1 parsers 1 or more repeated applications of p
+-}
+many' :: Parser a -> Parser [a]
+many' p = many1 p `option` return []
+
+many1 :: Parser a -> Parser [a]
+many1 p = do
+    a  <- p
+    as <- many' p
+    return (a : as)
+
+{-
+sepBy parses repeated applications (0 or more) of p separated by applications of Parser sep whose values are thrown away. sepBy1 imples 1 or more application as before.
+-}
+sepBy :: Parser a -> Parser b -> Parser [a]
+sepBy p sep = (p `sepBy1` sep) `option` return []
+
+sepBy1 :: Parser a -> Parser b -> Parser [a]
+sepBy1 p sep = do
+    a  <- p
+    as <- many
+        (do
+            sep
+            p
+        )
+    return (a : as)
+
+p :: Parser (Char, Char, Char)
+p = do
+    a <- char 'a'
+    b <- char 'b'
+    c <- satisfies ('c' ==)
+    d <- item
+    e <- string "abcd"
+    f <- many' (char 'a')
+    h <- sepBy (char 'a') (char ' ')
+    return (b, c, d)
+
+main :: IO ()
+main = do
+    contents <- readFile coolFile
+    print contents

@@ -1,0 +1,110 @@
+module Main where
+
+import           Control.Applicative     hiding ( many )
+import           Control.Monad
+import           Control.Monad                  ( liftM
+                                                , ap
+                                                )
+import           Prelude                 hiding ( many )
+
+newtype Parser a = Parser {parse :: String -> [(a,String)]}
+
+instance Functor Parser where
+    fmap = liftM
+
+instance Applicative Parser where
+    pure  = return
+    (<*>) = ap
+
+instance Monad Parser where
+    return a = Parser (\s -> [(a, s)])
+
+    p >>= f = Parser h
+      where
+        p' = parse p
+        h s = ps
+          where
+            xs = p' s
+            ys = fmap (\(a, cs) -> (parse $ f a) cs) xs
+            ps = concat ys
+
+instance Alternative Parser where
+    empty = mzero
+    (<|>) = mplus
+instance MonadPlus Parser where
+    mzero = Parser (const [])
+    mplus p q = Parser (\s -> parse p s ++ parse q s)
+
+-- removes an item
+item :: Parser Char
+item = Parser
+    (\s -> case s of
+        []       -> []
+        (x : xs) -> [(x, xs)]
+    )
+
+-- parses if f is true, otherwise defaults
+satisfies :: (Char -> Bool) -> Parser Char
+satisfies f = do
+    a <- item
+    case f a of
+        True  -> return a
+        False -> mzero
+
+-- parses the specified char
+char :: Char -> Parser Char
+char c = satisfies (== c)
+
+-- parses the specified string
+string :: String -> Parser String
+string ""       = return ""
+string (c : cs) = do
+    q  <- char c
+    rs <- string cs
+    return (q : rs)
+
+-- parses the first option
+option :: Parser a -> Parser a -> Parser a
+option p q = Parser
+    (\s -> case parse (mplus p q) s of
+        []       -> mzero
+        (x : xs) -> [x]
+    )
+
+many :: Parser a -> Parser [a]
+many p = many1 p `option` return []
+
+many1 :: Parser a -> Parser [a]
+many1 p = do
+    c  <- p
+    cs <- many p
+    return (c : cs)
+
+
+sepBy :: Parser a -> Parser b -> Parser [a]
+sepBy p q = sepBy1 p q `option` return []
+
+sepBy1 :: Parser a -> Parser b -> Parser [a]
+sepBy1 p sep = do
+    c  <- p
+    cs <- many
+        (do
+            sep
+            p
+        )
+    return (c : cs)
+
+-- run :: Show a => String -> [(a, String)]
+-- run cs = do
+--     r <- sepBy (char 'a') (char ' ')
+--     return $ parse r cs
+
+test :: String -> Parser a -> [(a, String)]
+test cs p = parse p cs
+
+coolFile = "/Users/neshdev/cool_compiler/invalid_cool.cl"
+
+main :: IO ()
+main = do
+    contents <- readFile coolFile
+    print contents
