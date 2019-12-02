@@ -127,6 +127,7 @@ grammarCharsParser =
     <|> string' ":"  ColonToken
     <|> string' "."  DotToken
     <|> string' ","  CommaToken
+    <|> string' "@"  AtToken
 
 
 multilineContinueParser :: Parser String
@@ -190,6 +191,7 @@ data Token =
         | DivideOperatorToken
         | MultiplyOperatorToken
         | NegateOperatorToken
+        | AtToken
         | DotToken
         | CommaToken
         | CatchAllToken
@@ -197,6 +199,39 @@ data Token =
 
 instance Pretty Token where
   pretty a = pretty $ show a
+
+
+maximalMatch :: [(Lexeme, String)] -> [(Lexeme, String)] -> [(Lexeme, String)]
+maximalMatch [] b  = b
+maximalMatch a  [] = a
+maximalMatch (((t, c), cs) : rs) (((t', c'), cs') : rs')
+  | c < c'    = ((t', c'), cs') : rs'
+  | otherwise = ((t, c), cs) : rs --left has higher priority
+
+maximalMunch :: Parser Lexeme
+maximalMunch = Parser
+  (\s -> foldl maximalMatch (parse x s) [ parse p s | p <- xs ])
+ where
+  parsers =
+    [ typeParser
+    , negativeIntegerParser
+    , integerParser
+    , emptyStringParser
+    , stringParser
+    , keywordParser
+    , typeParser
+    , objectParser
+    , singleLineCommentParser
+    , singleLineEmptyCommentParser
+    , multilineCommentParser
+    , operatorParser
+    , comparisonOperatorParser
+    , grammarCharsParser
+    , whitespaceParser
+    , allOtherParser
+    ]
+  x  = head parsers
+  xs = tail parsers
 
 parseAll :: Parser Lexeme
 parseAll =
@@ -219,7 +254,7 @@ parseAll =
 
 parseFile :: String -> [(Lexeme, String)]
 parseFile [] = []
-parseFile xs = case parse parseAll xs of
+parseFile xs = case parse maximalMunch xs of
   (((CatchAllToken, cs), rs) : ys) -> [((CatchAllToken, cs), rs)]
   ((t                  , rs) : ys) -> (t, rs) : parseFile rs
   []                               -> []
@@ -248,7 +283,7 @@ files =
   , "sort_list.cl"
   ]
 
-coolFile = "data/atoi_test.cl"
+coolFile = "data/book_list.cl"
 
 main :: IO ()
 main = do
@@ -266,5 +301,5 @@ main = do
   -- print (t9, rs9)
   let r = parseFile contents
   let s = [ (t, cs) | ((t, cs), ss) <- r, t /= WhiteSpaceToken ]
-  print $ map fst r
+  --print $ map fst r
   print $ pretty s
