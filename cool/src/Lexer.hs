@@ -283,7 +283,17 @@ files =
   , "sort_list.cl"
   ]
 
-coolFile = "data/book_list.cl"
+coolFile = "data/hello_world.cl"
+
+tokenize :: String -> [Lexeme]
+tokenize contents = do
+  let r = parseFile contents
+  let s =
+        [ (t, cs)
+        | ((t, cs), ss) <- r
+        , t `notElem` [WhiteSpaceToken, MultiLineCommentToken, InlineCommentToken]
+        ]
+  s
 
 main :: IO ()
 main = do

@@ -1,0 +1,39 @@
+module Grammar where
+
+
+import           Lexer
+import           Data.Text.Prettyprint.Doc
+
+newtype Tree a = Tree a [Tree a]
+
+
+newtype Error a = GrammarParseError a
+
+
+
+program :: Parser (Tree a)
+program ts = do
+    c <- many1 _class
+    s <- token SemicolonToken 
+program [] = Leaf
+
+tokenizer :: [Lexeme] -> Parser (Tree a) -> Either (Error a) (Tree a)
+tokenizer ts p = runParser p ts
+
+_class :: Parser (Tree Lexeme)
+_class (x : xs) = do
+    c <- token ClassKeywordToken
+    t <- token TypeIdToken
+    i <- many do { i' <- token InheritsKeywordToken; it'<- token TypeIdToken; return [Tree i' Leaf,Tree it' Leaf] }
+    l <- token LeftBraceToken
+    f <- many do { f' <- _feature; s' <- token SemicolonToken ; return [f', Tree s' []] }
+    r <- token RightBraceToken
+    return $ Tree c [] ++ Tree t [] ++ i ++ Tree l [] ++ f ++ Tree r []
+
+
+main :: IO ()
+main = do
+    contents <- readFile Lexer.coolFile
+    print contents
+    print $ pretty $ tokenize contents
+    tokenizer (tokenize contents) _program
